@@ -53,9 +53,13 @@ extern const VMStateDescription vmstate_htif;
 extern const MemoryRegionOps htif_io_ops;
 
 /* legacy pre qom */
-HTIFState *htif_mm_init(MemoryRegion *address_space,
+HTIFState *htif_mm_init_elf(MemoryRegion *address_space,
                         const char *kernel_filename, qemu_irq irq,
                         MemoryRegion *main_mem,
                         CPURISCVState *env, CharDriverState *chr);
 
+HTIFState *htif_mm_init(MemoryRegion *address_space,
+           uint64_t tohost_addr, uint64_t tohost_size, uint64_t fromhost_addr,
+           uint64_t fromhost_size, qemu_irq irq, MemoryRegion *main_mem,
+           CPURISCVState *env, CharDriverState *chr);
 #endif

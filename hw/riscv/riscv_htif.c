@@ -339,6 +339,51 @@ static const MemoryRegionOps htif_mm_ops[3] = {
 };
 
 HTIFState *htif_mm_init(MemoryRegion *address_space,
+           uint64_t tohost_addr, uint64_t tohost_size, uint64_t fromhost_addr,
+           uint64_t fromhost_size, qemu_irq irq, MemoryRegion *main_mem,
+           CPURISCVState *env, CharDriverState *chr)
+{
+    /* now setup HTIF device */
+    HTIFState *htifstate;
+
+    htifstate = g_malloc0(sizeof(HTIFState));
+    htifstate->irq = irq;
+    htifstate->address_space = address_space;
+    htifstate->main_mem = main_mem;
+    htifstate->main_mem_ram_ptr = memory_region_get_ram_ptr(main_mem);
+    htifstate->env = env;
+    htifstate->chr = chr;
+    htifstate->pending_read = 0;
+    htifstate->allow_tohost = 0;
+    htifstate->fromhost_inprogress = 0;
+    htifstate->fromhost_size = fromhost_size;
+    htifstate->tohost_size = tohost_size;
+
+#ifdef ENABLE_CHARDEV
+    qemu_chr_add_handlers(htifstate->chr, htif_can_recv, htif_recv, htif_event,
+                          htifstate);
+#endif
+
+    uint64_t base = tohost_addr < fromhost_addr ? tohost_addr : fromhost_addr;
+    uint64_t second = tohost_addr < fromhost_addr ? fromhost_addr : tohost_addr;
+    uint64_t regionwidth = second - base + 8;
+
+    htifstate->tohost_offset = base == tohost_addr ? 0 : tohost_addr -
+                                                         fromhost_addr;
+    htifstate->fromhost_offset = base == fromhost_addr ? 0 : fromhost_addr -
+                                                             tohost_addr;
+
+    vmstate_register(NULL, base, &vmstate_htif, htifstate);
+
+    memory_region_init_io(&htifstate->io, NULL,
+                          &htif_mm_ops[DEVICE_LITTLE_ENDIAN],
+                           htifstate, "htif", regionwidth);
+    memory_region_add_subregion(address_space, base, &htifstate->io);
+
+    return htifstate;
+}
+
+HTIFState *htif_mm_init_elf(MemoryRegion *address_space,
            const char *kernel_filename, qemu_irq irq, MemoryRegion *main_mem,
            CPURISCVState *env, CharDriverState *chr)
 {
@@ -395,42 +440,6 @@ HTIFState *htif_mm_init(MemoryRegion *address_space,
 #endif
     }
 
-    /* now setup HTIF device */
-    HTIFState *htifstate;
-
-    htifstate = g_malloc0(sizeof(HTIFState));
-    htifstate->irq = irq;
-    htifstate->address_space = address_space;
-    htifstate->main_mem = main_mem;
-    htifstate->main_mem_ram_ptr = memory_region_get_ram_ptr(main_mem);
-    htifstate->env = env;
-    htifstate->chr = chr;
-    htifstate->pending_read = 0;
-    htifstate->allow_tohost = 0;
-    htifstate->fromhost_inprogress = 0;
-    htifstate->fromhost_size = fromhost_size;
-    htifstate->tohost_size = tohost_size;
-
-#ifdef ENABLE_CHARDEV
-    qemu_chr_add_handlers(htifstate->chr, htif_can_recv, htif_recv, htif_event,
-                          htifstate);
-#endif
-
-    uint64_t base = tohost_addr < fromhost_addr ? tohost_addr : fromhost_addr;
-    uint64_t second = tohost_addr < fromhost_addr ? fromhost_addr : tohost_addr;
-    uint64_t regionwidth = second - base + 8;
-
-    htifstate->tohost_offset = base == tohost_addr ? 0 : tohost_addr -
-                                                         fromhost_addr;
-    htifstate->fromhost_offset = base == fromhost_addr ? 0 : fromhost_addr -
-                                                             tohost_addr;
-
-    vmstate_register(NULL, base, &vmstate_htif, htifstate);
-
-    memory_region_init_io(&htifstate->io, NULL,
-                          &htif_mm_ops[DEVICE_LITTLE_ENDIAN],
-                           htifstate, "htif", regionwidth);
-    memory_region_add_subregion(address_space, base, &htifstate->io);
-
-    return htifstate;
+    return htif_mm_init(address_space, fromhost_addr, fromhost_size,
+        tohost_addr, tohost_size, irq, main_mem, env, chr);
 }

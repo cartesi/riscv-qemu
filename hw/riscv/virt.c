@@ -54,6 +54,7 @@ static const struct MemmapEntry {
     [VIRT_CLINT] =    {  0x2000000,    0x10000 },
     [VIRT_PLIC] =     {  0xc000000,  0x4000000 },
     [VIRT_VIRTIO] =   { 0x10000000,     0x1000 },
+    [VIRT_HTIF] =     { 0x40008000,       0x10 },
     [VIRT_DRAM] =     { 0x80000000,        0x0 },
 };
 
@@ -76,7 +77,7 @@ static uint64_t load_kernel(const char *kernel_filename)
 }
 
 static void create_fdt(RISCVVirtState *s, const struct MemmapEntry *memmap,
-    uint64_t mem_size)
+    uint64_t mem_size, const char *cmdline)
 {
     void *fdt;
     int cpu;
@@ -98,6 +99,14 @@ static void create_fdt(RISCVVirtState *s, const struct MemmapEntry *memmap,
 
     qemu_fdt_add_subnode(fdt, "/htif");
     qemu_fdt_setprop_string(fdt, "/htif", "compatible", "ucb,htif0");
+    qemu_fdt_setprop_cells(fdt, "/htif", "reg",
+        0x0, memmap[VIRT_HTIF].base,
+        0x0, memmap[VIRT_HTIF].size);
+
+    qemu_fdt_add_subnode(fdt, "/chosen");
+    qemu_fdt_setprop_string(fdt, "/chosen", "bootargs", cmdline? cmdline: "");
+
+
 
     qemu_fdt_add_subnode(fdt, "/soc");
     qemu_fdt_setprop(fdt, "/soc", "ranges", NULL, 0);
@@ -226,7 +235,7 @@ static void riscv_virt_board_init(MachineState *machine)
         main_mem);
 
     /* create device tree */
-    create_fdt(s, memmap, machine->ram_size);
+    create_fdt(s, memmap, machine->ram_size, machine->kernel_cmdline);
 
     /* boot rom */
     memory_region_init_ram(boot_rom, NULL, "riscv_virt_board.bootrom",
@@ -262,12 +271,18 @@ static void riscv_virt_board_init(MachineState *machine)
     qemu_fdt_dumpdtb(s->fdt, s->fdt_size);
     cpu_physical_memory_write(ROM_BASE + sizeof(reset_vec), s->fdt, s->fdt_size);
 
+#if 0
     /* add memory mapped htif registers at location specified in the symbol
        table of the elf being loaded (thus kernel_filename is passed to the
        init rather than an address) */
-    htif_mm_init(system_memory, machine->kernel_filename,
+    htif_mm_init_elf(system_memory, machine->kernel_filename,
         s->soc.harts[0].env.irq[4], boot_rom,
         &s->soc.harts[0].env, serial_hds[0]);
+#else
+    htif_mm_init(system_memory, memmap[VIRT_HTIF].base, 8,
+        memmap[VIRT_HTIF].base+8, 8, s->soc.harts[0].env.irq[4], boot_rom,
+        &s->soc.harts[0].env, serial_hds[0]);
+#endif
 
     /* MMIO */
     s->plic = sifive_plic_create(memmap[VIRT_PLIC].base, &s->soc,

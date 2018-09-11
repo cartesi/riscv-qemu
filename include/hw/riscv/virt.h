@@ -48,6 +48,7 @@ enum {
 	VIRT_CLINT,
 	VIRT_PLIC,
     VIRT_VIRTIO,
+    VIRT_HTIF,
     VIRT_DRAM
 };
 

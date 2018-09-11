@@ -166,7 +166,7 @@ static void riscv_spike_board_init(MachineState *machine)
     /* add memory mapped htif registers at location specified in the symbol
        table of the elf being loaded (thus kernel_filename is passed to the
        init rather than an address) */
-    htif_mm_init(system_memory, machine->kernel_filename,
+    htif_mm_init_elf(system_memory, machine->kernel_filename,
         s->soc.harts[0].env.irq[4], boot_rom,
         &s->soc.harts[0].env, serial_hds[0]);
 
